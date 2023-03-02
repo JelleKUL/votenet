@@ -3,7 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-""" Demo of using VoteNet 3D object detector to detect objects from a point cloud.
+""" Using VoteNet 3D object detector to detect objects from a point cloud.
 """
 
 import os
@@ -12,22 +12,21 @@ import numpy as np
 import argparse
 import importlib
 import time
-
-parser = argparse.ArgumentParser()
-parser.add_argument('--dataset', default='sunrgbd', help='Dataset: sunrgbd or scannet [default: sunrgbd]')
-parser.add_argument('--num_point', type=int, default=20000, help='Point Number [default: 20000]')
-FLAGS = parser.parse_args()
-
+import open3d as o3d
 import torch
 import torch.nn as nn
 import torch.optim as optim
 
+dataset = 'scannet'
+num_point = 20000
+checkpoint_path = "/home/jvermandere/projects/votenet/demo_files/pretrained_votenet_on_scannet.tar"
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = BASE_DIR
-
 from utils.pc_util import random_sampling, read_ply
 from models.ap_helper import parse_predictions
-import models.votenet
+from scannet.scannet_detection_dataset import DC
+import models.votenet as votenet
 
 def preprocess_point_cloud(point_cloud):
     ''' Prepare the numpy point cloud (N,3) for forward pass '''
@@ -35,27 +34,13 @@ def preprocess_point_cloud(point_cloud):
     floor_height = np.percentile(point_cloud[:,2],0.99)
     height = point_cloud[:,2] - floor_height
     point_cloud = np.concatenate([point_cloud, np.expand_dims(height, 1)],1) # (N,4) or (N,7)
-    point_cloud = random_sampling(point_cloud, FLAGS.num_point)
+    point_cloud = random_sampling(point_cloud, num_point)
     pc = np.expand_dims(point_cloud.astype(np.float32), 0) # (1,40000,4)
     return pc
 
-if __name__=='__main__':
-    
+def calculate(pc_path):
     # Set file paths and dataset config
-    demo_dir = os.path.join(BASE_DIR, 'demo_files') 
-    if FLAGS.dataset == 'sunrgbd':
-        sys.path.append(os.path.join(ROOT_DIR, 'sunrgbd'))
-        from sunrgbd_detection_dataset import DC # dataset config
-        checkpoint_path = os.path.join(demo_dir, 'pretrained_votenet_on_sunrgbd.tar')
-        pc_path = os.path.join(demo_dir, 'input_pc_sunrgbd.ply')
-    elif FLAGS.dataset == 'scannet':
-        sys.path.append(os.path.join(ROOT_DIR, 'scannet'))
-        from scannet_detection_dataset import DC # dataset config
-        checkpoint_path = os.path.join(demo_dir, 'pretrained_votenet_on_scannet.tar')
-        pc_path = os.path.join(demo_dir, 'input_pc_scannet.ply')
-    else:
-        print('Unkown dataset %s. Exiting.'%(DATASET))
-        exit(-1)
+    save_dir = os.path.join(BASE_DIR, 'demo_files') 
 
     eval_config_dict = {'remove_empty_box': True, 'use_3d_nms': True, 'nms_iou': 0.25,
         'use_old_type_nms': False, 'cls_nms': False, 'per_class_proposal': False,
@@ -81,8 +66,8 @@ if __name__=='__main__':
    
     # Load and preprocess input point cloud 
     net.eval() # set model to eval mode (for bn and dp)
-    point_cloud = read_ply(pc_path)
-    pc = preprocess_point_cloud(point_cloud)
+    pcd = o3d.io.read_point_cloud(pc_path)
+    pc = preprocess_point_cloud(np.asarray(pcd.points))
     print('Loaded point cloud data: %s'%(pc_path))
    
     # Model inference
@@ -96,7 +81,7 @@ if __name__=='__main__':
     pred_map_cls = parse_predictions(end_points, eval_config_dict)
     print('Finished detection. %d object detected.'%(len(pred_map_cls[0])))
   
-    dump_dir = os.path.join(demo_dir, '%s_results'%(FLAGS.dataset))
-    if not os.path.exists(dump_dir): os.mkdir(dump_dir) 
+    dump_dir = os.path.join(save_dir, '%s_results'%(dataset))
+    if not os.path.exists(dump_dir): os.mkdir(dump_dir)
     MODEL.dump_results(end_points, dump_dir, DC, True)
     print('Dumped detection results to folder %s'%(dump_dir))

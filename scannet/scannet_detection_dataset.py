@@ -17,9 +17,9 @@ ROOT_DIR = os.path.dirname(BASE_DIR)
 sys.path.append(ROOT_DIR)
 sys.path.append(os.path.join(ROOT_DIR, 'utils'))
 import pc_util
-from model_util_scannet import rotate_aligned_boxes
+from scannet.model_util_scannet import rotate_aligned_boxes
 
-from model_util_scannet import ScannetDatasetConfig
+from scannet.model_util_scannet import ScannetDatasetConfig
 DC = ScannetDatasetConfig()
 MAX_NUM_OBJ = 64
 MEAN_COLOR_RGB = np.array([109.8, 97.2, 83.8])
